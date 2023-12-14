@@ -1,0 +1,293 @@
+---
+title: "PRS veronique"
+author: "Véronique Boumtje. Some modifcations by Sébastien Renaut"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    number_sections: F
+params:
+  datapath: 'C:/Users/renseb01/Documents/PRS'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = params$datapath)
+knitr::opts_chunk$set(echo = F)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(patchwork)
+library(RColorBrewer)
+library(data.table)
+library(DT)
+library(table1)
+library(caret)
+library(rms)
+library(psychometric)
+```
+
+
+```{r data upload, include=FALSE}
+Data_PRS_GRS <- data.table::fread(file.path(params$datapath,'data/Table_ClinData_PRS_GRS_20231130.csv'))
+
+OutputGRS_ILCCO_LORD_CaG <- data.table::fread(file.path(params$datapath,"data/OutputGRS_ILCCO_LORD_CaG.profile"), header=T)
+
+
+Data_PRS_GRS1<- merge(Data_PRS_GRS, OutputGRS_ILCCO_LORD_CaG,by="IID")
+```
+
+
+```{r data analysis, include=FALSE}
+#NAs
+Data_PRS_GRS$Lung_cancer<-as.factor(Data_PRS_GRS$Lung_cancer)
+Data_PRS_GRS$Lung_cancer<- ifelse(Data_PRS_GRS$Lung_cancer==0, "Controls","Cases")
+
+Data_PRS_GRS$Histologic_type<- ifelse(Data_PRS_GRS$Lung_cancer=="Controls" & is.na(Data_PRS_GRS$Histologic_type), "NO",Data_PRS_GRS$Histologic_type)
+
+Data_PRS_GRS$Pathologic_stage<- ifelse(Data_PRS_GRS$Lung_cancer=="Controls" & is.na(Data_PRS_GRS$Pathologic_stage), "NO",Data_PRS_GRS$Pathologic_stage)
+
+Data_PRS_GRS$Smoking_years<- ifelse(Data_PRS_GRS$tabagism== "Never_smoker" & is.na(Data_PRS_GRS$Smoking_years),0,Data_PRS_GRS$Smoking_years)
+
+#Change the character as factors and define the level of variable
+Data_PRS_GRS$Sex <- as.factor(Data_PRS_GRS$Sex)
+Data_PRS_GRS$Lung_cancer <- as.factor(Data_PRS_GRS$Lung_cancer)
+Data_PRS_GRS$tabagism <- as.factor(Data_PRS_GRS$tabagism)
+Data_PRS_GRS$Pathologic_stage <- as.factor(Data_PRS_GRS$Pathologic_stage)
+Data_PRS_GRS$Histologic_type <- as.factor(Data_PRS_GRS$Histologic_type)
+Data_PRS_GRS$Lung_cancer <- car::recode(Data_PRS_GRS$Lung_cancer, "'Controls'= 0; 'Cases'=1")
+Data_PRS_GRS$rs1051730 <- as.factor(Data_PRS_GRS$rs1051730)
+Data_PRS_GRS$rs1051730<- relevel(Data_PRS_GRS$rs1051730, "GG")
+Data_PRS_GRS$tabagism<- relevel(Data_PRS_GRS$tabagism, "Never_smoker")
+
+#sort missing data
+#missmap(Data_PRS_GRS)
+#miss_var_summary(Data_PRS_GRS)
+#gg_miss_var(Data_PRS_GRS)
+
+#GRS normalization
+Data_PRS_GRS$GRS_Bosse_44_unweighted_z <- (Data_PRS_GRS[,c("GRS_Bosse_44_unweighted")]-mean(Data_PRS_GRS$GRS_Bosse_44_unweighted))/sd(Data_PRS_GRS$GRS_Bosse_44_unweighted)
+
+
+Data_PRS_GRS$GRS_Bosse_44_weighted_z <- (Data_PRS_GRS[,c("GRS_Bosse_44_weighted")]-mean(Data_PRS_GRS$GRS_Bosse_44_weighted))/sd(Data_PRS_GRS$GRS_Bosse_44_weighted)
+
+
+Data_PRS_GRS$GRS_Byun_38_unweighted_z <- (Data_PRS_GRS[,c("GRS_Byun_38_unweighted")]-mean(Data_PRS_GRS$GRS_Byun_38_unweighted))/sd(Data_PRS_GRS$GRS_Byun_38_unweighted)
+
+Data_PRS_GRS$GRS_Byun_38_weighted_z <- (Data_PRS_GRS[,c("GRS_Byun_38_weighted")]-mean(Data_PRS_GRS$GRS_Byun_38_weighted))/sd(Data_PRS_GRS$GRS_Byun_38_weighted)
+
+#Select and Rename some variable
+Data_PRS_GRS1 <-Data_PRS_GRS%>% dplyr::select(c(IID,Age, Sex, BMI, Lung_cancer, tabagism, Smoking_years, Histologic_type, Pathologic_stage, PRS_LORD_CaG,GRS_Bosse_44_unweighted_z, GRS_Bosse_44_weighted_z,GRS_Byun_38_unweighted_z,GRS_Byun_38_weighted_z, rs1051730))
+
+#transform character as factor
+Data_PRS_GRS1$tabagism1 <- ifelse(Data_PRS_GRS1$tabagism=="Never_smoker", 0, 1)
+Data_PRS_GRS1$Lung_cancer <- car::recode(Data_PRS_GRS1$Lung_cancer, "'Controls'= 0; 'Cases'=1")
+Data_PRS_GRS1$rs1051730 <- as.factor(Data_PRS_GRS1$rs1051730)
+Data_PRS_GRS1$rs1051730<- relevel(Data_PRS_GRS1$rs1051730, "GG")
+
+Clinical_characteristics<- table1(~Age+ Sex+ BMI+ tabagism+ Smoking_years+ Histologic_type+ Pathologic_stage+ PRS_LORD_CaG + GRS_Bosse_44_unweighted + GRS_Bosse_44_weighted + GRS_Byun_38_unweighted + GRS_Byun_38_weighted + rs1051730| Lung_cancer, data=Data_PRS_GRS)
+#Clinical_characteristics
+
+Clinical_characteristics1<- table1(~Age+ Sex+ BMI+ tabagism+ Smoking_years+ Histologic_type+ Pathologic_stage+ PRS_LORD_CaG + GRS_Bosse_44_unweighted_z + GRS_Bosse_44_weighted_z + GRS_Byun_38_unweighted_z + GRS_Byun_38_weighted_z + rs1051730| Lung_cancer, data=Data_PRS_GRS1)
+#Clinical_characteristics1
+
+
+#Choose the best PRS predictor
+# Create differents groups of PRS
+percentile_values <- quantile(Data_PRS_GRS1$PRS_LORD_CaG, probs = c(0.2, 0.8))
+Data_PRS_GRS1$Gw_PRS_group <- cut(Data_PRS_GRS1$PRS_LORD_CaG, breaks = c(-Inf, percentile_values[1], percentile_values[2], Inf), labels = c("Gw_PRS<20%", "Gw_PRS_20-80%", "Gw_PRS>80%"))
+Data_PRS_GRS1$Gw_PRS_group <- factor(Data_PRS_GRS1$Gw_PRS_group, levels = c("Gw_PRS<20%", "Gw_PRS_20-80%", "Gw_PRS>80%"))
+
+percentile_values <- quantile(Data_PRS_GRS1$GRS_Bosse_44_unweighted_z, probs = c(0.2, 0.8))
+Data_PRS_GRS1$GRS_Bosse_44_unweighted_group <- cut(Data_PRS_GRS1$GRS_Bosse_44_unweighted_z, breaks = c(-Inf, percentile_values[1], percentile_values[2], Inf), labels = c("Bosse_44_unweighted<20%", "Bosse_44_unweighted_20-80%", "Bosse_44_unweighted>80%"))
+Data_PRS_GRS1$GRS_Bosse_44_unweighted_group <- factor(Data_PRS_GRS1$GRS_Bosse_44_unweighted_group, levels = c("Bosse_44_unweighted<20%", "Bosse_44_unweighted_20-80%", "Bosse_44_unweighted>80%"))
+
+percentile_values <- quantile(Data_PRS_GRS1$GRS_Bosse_44_weighted_z, probs = c(0.2, 0.8))
+Data_PRS_GRS1$GRS_Bosse_44_weighted_group <- cut(Data_PRS_GRS1$GRS_Bosse_44_weighted_z, breaks = c(-Inf, percentile_values[1], percentile_values[2], Inf), labels = c("Bosse_44_weighted<20%", "Bosse_44_weighted_20-80%", "Bosse_44_weighted>80%"))
+Data_PRS_GRS1$GRS_Bosse_44_weighted_group <- factor(Data_PRS_GRS1$GRS_Bosse_44_weighted_group, levels = c("Bosse_44_weighted<20%", "Bosse_44_weighted_20-80%", "Bosse_44_weighted>80%"))
+
+percentile_values <- quantile(Data_PRS_GRS1$GRS_Byun_38_unweighted_z, probs = c(0.2, 0.8))
+Data_PRS_GRS1$GRS_Byun_38_unweighted_group <- cut(Data_PRS_GRS1$GRS_Byun_38_unweighted_z, breaks = c(-Inf, percentile_values[1], percentile_values[2], Inf), labels = c("Byun_38_unweighted<20%", "Byun_38_unweighted_20-80%", "Byun_38_unweighted>80%"))
+Data_PRS_GRS1$GRS_Byun_38_unweighted_group <- factor(Data_PRS_GRS1$GRS_Byun_38_unweighted_group, levels = c("Byun_38_unweighted<20%", "Byun_38_unweighted_20-80%", "Byun_38_unweighted>80%"))
+
+percentile_values <- quantile(Data_PRS_GRS1$GRS_Byun_38_weighted_z, probs = c(0.2, 0.8))
+Data_PRS_GRS1$GRS_Byun_38_weighted_group <- cut(Data_PRS_GRS1$GRS_Byun_38_weighted_z, breaks = c(-Inf, percentile_values[1], percentile_values[2], Inf), labels = c("Byun_38_weighted<20%", "Byun_38_weighted_20-80%", "Byun_38_weighted>80%"))
+Data_PRS_GRS1$GRS_Byun_38_weighted_group <- factor(Data_PRS_GRS1$GRS_Byun_38_weighted_group, levels = c("Byun_38_weighted<20%", "Byun_38_weighted_20-80%", "Byun_38_weighted>80%"))
+
+
+#number of cases and controls according to the genetiv risk subgroup
+# create a table with needed variable
+
+Gw_PRS <- table(Data_PRS_GRS1$Lung_cancer, Data_PRS_GRS1$Gw_PRS_group)
+GRS_Bosse_44_unweighted <- table(Data_PRS_GRS1$Lung_cancer, Data_PRS_GRS1$GRS_Bosse_44_unweighted_group)
+GRS_Bosse_44_weighted <- table(Data_PRS_GRS1$Lung_cancer, Data_PRS_GRS1$GRS_Bosse_44_weighted_group)
+GRS_Byun_38_unweighted <- table(Data_PRS_GRS1$Lung_cancer, Data_PRS_GRS1$GRS_Byun_38_unweighted_group)
+GRS_Byun_38_weighted <- table(Data_PRS_GRS1$Lung_cancer, Data_PRS_GRS1$GRS_Byun_38_weighted_group)
+GRS_rs1051730 <- table(Data_PRS_GRS1$Lung_cancer, Data_PRS_GRS1$rs1051730)
+
+# perform the chi-square test
+print(chisq.test(Gw_PRS))
+print(chisq.test(GRS_Bosse_44_unweighted))
+print(chisq.test(GRS_Bosse_44_weighted))
+print(chisq.test(GRS_Byun_38_unweighted))
+print(chisq.test(GRS_Byun_38_weighted))
+print(chisq.test(GRS_rs1051730))
+
+# summarise 
+Number_cases<- table1(~Gw_PRS_group + GRS_Bosse_44_unweighted_group + GRS_Bosse_44_weighted_group + GRS_Byun_38_unweighted_group + GRS_Byun_38_weighted_group + rs1051730| Lung_cancer, data=Data_PRS_GRS1)
+Number_cases
+
+###SNP as number of alleles
+Data_PRS_GRS1$rs1051730_alleles = 0
+Data_PRS_GRS1$rs1051730_alleles[Data_PRS_GRS1$rs1051730=='AA']  = 2
+Data_PRS_GRS1$rs1051730_alleles[Data_PRS_GRS1$rs1051730=='GA' ]  =  1
+Data_PRS_GRS1$rs1051730_alleles[Data_PRS_GRS1$rs1051730=='GG'] =  0
+Data_PRS_GRS1$rs1051730_alleles = as.numeric(Data_PRS_GRS1$rs1051730_alleles)
+
+
+#regression model of different PRS
+model.Gw_PRS <- glm(Lung_cancer ~ PRS_LORD_CaG , data = Data_PRS_GRS1, family = binomial)
+  model.GRS_Bosse_44_unweighted <- glm(Lung_cancer ~ GRS_Bosse_44_unweighted_z , data = Data_PRS_GRS1, family = binomial)
+  model.GRS_Bosse_44_weighted <- glm(Lung_cancer ~ GRS_Bosse_44_weighted_z, data = Data_PRS_GRS1, family = binomial)
+  model.GRS_Byun_38_unweighted <- glm(Lung_cancer ~ GRS_Byun_38_unweighted_z , data = Data_PRS_GRS1, family = binomial)
+  model.GRS_Byun_38_weighted <- glm(Lung_cancer ~ GRS_Byun_38_weighted_z, data = Data_PRS_GRS1,family = binomial)
+  model.GRS_rs1051730 <- glm(Lung_cancer ~ rs1051730, data = Data_PRS_GRS1, family = binomial)
+  model.GRS_rs1051730_alleles <- glm(Lung_cancer ~ rs1051730_alleles, data = Data_PRS_GRS1, family = binomial)
+  
+  
+  # Convert model output to a tidy data frame
+  model_table1 <- broom::tidy(model.Gw_PRS,conf.int = T)
+  model_table2 <- broom::tidy(model.GRS_Bosse_44_unweighted,conf.int = T)
+  model_table3 <- broom::tidy(model.GRS_Bosse_44_weighted,conf.int = T)
+  model_table4 <- broom::tidy(model.GRS_Byun_38_unweighted,conf.int = T)
+  model_table5 <- broom::tidy(model.GRS_Byun_38_weighted,conf.int = T)
+  model_table6 <- broom::tidy(model.GRS_rs1051730,conf.int = T)
+  model_table7 <- broom::tidy(model.GRS_rs1051730_alleles,conf.int = T)
+  
+
+  model_table <- rbind(model_table1, model_table2, model_table3, model_table4, model_table5, model_table6,model_table7)
+  # Calculate odds ratios and their confidence intervals
+  model_table$estimate <- ifelse(model_table$term == "(Intercept)",0, model_table$estimate)
+  model_table <- model_table %>%
+    mutate(odds_ratio = exp(estimate))
+  
+#variance_explained 
+  # lrm model
+
+model.Gw_PRS1 <- rms::lrm(Lung_cancer~ PRS_LORD_CaG, data=Data_PRS_GRS1)
+model.GRS_Bosse_44_unweighted1 <- rms::lrm(Lung_cancer~ GRS_Bosse_44_unweighted_z, data=Data_PRS_GRS1)
+model.GRS_Bosse_44_weighted1 <- rms::lrm(Lung_cancer~ GRS_Bosse_44_weighted_z, data=Data_PRS_GRS1)
+model.GRS_Byun_38_unweighted1 <- rms::lrm(Lung_cancer~ GRS_Byun_38_unweighted_z, data=Data_PRS_GRS1)
+model.GRS_Byun_38_weighted1 <- rms::lrm(Lung_cancer~ GRS_Byun_38_weighted_z, data=Data_PRS_GRS1)
+model.GRS_rs1051730 <- rms::lrm(Lung_cancer~ rs1051730, data=Data_PRS_GRS1)
+model.GRS_rs1051730_alleles <- rms::lrm(Lung_cancer~ rs1051730_alleles, data=Data_PRS_GRS1)
+
+# Convert model output to a tidy data frame
+  R2 <- model.Gw_PRS1$stats[c("R2")]
+  AUC <- model.Gw_PRS1$stats[c("C")]
+model_tab0 <- data.frame(term ="PRS_LORD_CaG", R2 = R2, AUC = AUC)
+
+  R2 <- model.GRS_Bosse_44_unweighted1$stats[c("R2")]
+  AUC <- model.GRS_Bosse_44_unweighted1$stats[c("C")]
+model_tab2 <- rbind(model_tab0, data.frame(term= "GRS_Bosse_44_unweighted", R2 = R2,  AUC = AUC))
+
+  R2 <- model.GRS_Bosse_44_weighted1$stats[c("R2")]
+  AUC <- model.GRS_Bosse_44_weighted1$stats[c("C")]
+model_tab3 <- rbind(model_tab2,data.frame(term= "GRS_Bosse_44_weighted", R2 = R2,  AUC = AUC))
+
+  R2 <- model.GRS_Byun_38_unweighted1$stats[c("R2")]
+  AUC <- model.GRS_Byun_38_unweighted1$stats[c("C")]
+model_tab4 <- rbind(model_tab3,data.frame(term= "GRS_Byun_38_unweighted", R2 = R2,  AUC = AUC))
+
+  R2 <- model.GRS_Byun_38_weighted1$stats[c("R2")]
+  AUC <- model.GRS_Byun_38_weighted1$stats[c("C")]
+model_tab5 <- rbind(model_tab4,data.frame(term= "GRS_Byun_38_weighted", R2 = R2,  AUC = AUC))
+
+  R2 <- model.GRS_rs1051730$stats[c("R2")]
+  AUC <- model.GRS_rs1051730$stats[c("C")]
+model_tab6 <- rbind(model_tab5,data.frame(term= "GRS_rs1051730", R2 = R2,  AUC = AUC))
+
+ R2 <- model.GRS_rs1051730_alleles$stats[c("R2")]
+  AUC <- model.GRS_rs1051730_alleles$stats[c("C")]
+model_tab7 <- rbind(model_tab6,data.frame(term= "rs1051730_alleles", R2 = R2,  AUC = AUC))
+
+
+CI_Gw_PRS <- CI.Rsq(model_tab7$R2[1],24012,1, level = .95)
+  CIa<- data.frame(term ="PRS_LORD_CaG",lower_CI = CI_Gw_PRS$LCL, upper_CI = CI_Gw_PRS$UCL)
+
+CI_GRS_Bosse_44_unweighted <- CI.Rsq(model_tab7$R2[2],24012,1, level = .95)
+  CIb  <- rbind(CIa, data.frame(term ="GRS_Bosse_44_unweighted",lower_CI = CI_GRS_Bosse_44_unweighted$LCL, upper_CI = CI_GRS_Bosse_44_unweighted$UCL))
+  
+  CI_GRS_Bosse_44_weighted <- CI.Rsq(model_tab7$R2[3],24012,1, level = .95)
+  CIc  <- rbind(CIb, data.frame(term ="GRS_Bosse_44_weighted",lower_CI = CI_GRS_Bosse_44_weighted$LCL, upper_CI = CI_GRS_Bosse_44_weighted$UCL))
+  
+  CI_GRS_Byun_38_unweighted <- CI.Rsq(model_tab7$R2[4],24012,1, level = .95)
+  CId  <- rbind(CIc, data.frame(term ="GRS_Byun_38_unweighted",lower_CI = CI_GRS_Byun_38_unweighted$LCL, upper_CI = CI_GRS_Byun_38_unweighted$UCL))
+  
+  CI_GRS_Byun_38_weighted <- CI.Rsq(model_tab7$R2[5],24012,1, level = .95)
+  CIe  <- rbind(CId, data.frame(term ="GRS_Byun_38_weighted",lower_CI = CI_GRS_Byun_38_weighted$LCL, upper_CI = CI_GRS_Byun_38_weighted$UCL))
+  
+  CI_GRS_rs1051730 <- CI.Rsq(model_tab7$R2[6],24012,2, level = .95)
+  CIf  <- rbind(CIe, data.frame(term ="GRS_rs1051730",lower_CI = CI_GRS_rs1051730$LCL, upper_CI = CI_GRS_rs1051730$UCL))
+
+  CI_GRS_rs1051730_alleles <- CI.Rsq(model_tab7$R2[7],24012,2, level = .95)
+  CIg  <- rbind(CIf, data.frame(term ="rs1051730_alleles",lower_CI = CI_GRS_rs1051730_alleles$LCL, upper_CI = CI_GRS_rs1051730_alleles$UCL))
+
+
+model.tab.lrm1 <- left_join(model_tab7,CIg, by= "term")
+
+write.csv(model.tab.lrm1,file.path(params$datapath,'results/model.tab.lrm1.csv'),row.names = F)
+write.csv(model_table,file.path(params$datapath,'results/model_table.csv'),row.names = F)
+```
+
+```{r Figure 1}
+pve = read.csv(file.path(params$datapath,'results/model.tab.lrm1.csv'))
+or = read.csv(file.path(params$datapath,'results/model_table.csv'))
+
+#OR CLEAN UP
+or = or[or$term != '(Intercept)',]
+or = or[or$term != 'rs1051730AA',]
+or = or[or$term != 'rs1051730GA',]
+
+or$Type = 'unweighted'
+or$Type[grep('_weighted',or$term)] = 'weighted'
+or$PRS = gsub('_unweighted_z','',or$term)
+or$PRS = gsub('_weighted_z','',or$PRS)
+or$PRS = gsub('_alleles','',or$PRS)
+
+#PVE CLEAN-UP
+pve= pve[pve$term != 'GRS_rs1051730',]
+pve$Type = 'unweighted'
+pve$Type[grep('_weighted',pve$term)] = 'weighted'
+pve$PRS = gsub('_unweighted','',pve$term)
+pve$PRS = gsub('_weighted','',pve$PRS)
+pve$PRS = gsub('_alleles','',pve$PRS)
+
+
+# OR
+plots_or <- ggplot(or, aes(PRS, odds_ratio,group = term,color = Type )) +
+  geom_boxplot(position = position_dodge2(preserve = "single")  ,lwd = 0.9) + 
+  theme_minimal() +
+  labs(title = "", x= "Risk score type", y = "Odds ratio") +
+  theme(strip.background = element_rect(fill="lightgray",colour = 'lightgray'),strip.text.x = element_text(size = 8,margin=margin()),legend.position='none',plot.title = element_text(size=12, hjust = 0.5), axis.text.x = element_text(size = 8,angle = 45, hjust = 1),axis.title.y = element_text(size = 10))
+
+#PVE 
+plots_pve <- ggplot(pve) + 
+  geom_boxplot( aes(PRS, R2,group = term,color = Type ),position = position_dodge2(preserve = "single"),lwd = 0.9,show.legend = FALSE) + 
+  geom_bar(aes(R2,group = term,fill = Type )) + ylim(0.002,0.02) + #(adding the bars, just to show a better legend)
+  theme_minimal() +
+  labs(title = "", x= "Risk score type", y = "Percentage of Variance Explained") +
+  theme(strip.background = element_rect(fill="lightgray",colour = 'lightgray'),strip.text.x = element_text(size = 8,margin=margin()),legend.position='right',plot.title = element_text(size=12, hjust = 0.5), axis.text.x = element_text(size = 8,angle = 45, hjust = 1),axis.title.y = element_text(size = 10))
+
+pdf(file.path(params$datapath,'results/Figure2.pdf'),width = 6,height = 4)
+(plots_or | plots_pve) + plot_annotation(tag_levels = 'A')
+dev.off()
+```
+
+
+
+# session info  
+```{r session, message= T}
+###session
+sessionInfo()
+```
+
+
