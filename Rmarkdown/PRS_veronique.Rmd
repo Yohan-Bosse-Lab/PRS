@@ -16,27 +16,28 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(patchwork)
-library(RColorBrewer)
-library(data.table)
-library(DT)
-library(table1)
+#library(RColorBrewer)
+#library(data.table)
+#library(DT)
+#library(table1)
 library(caret)
 library(rms)
 library(psychometric)
+#library(magick)
+#library(ggpubr)
+library(pROC)
 ```
 
 
 ```{r data upload, include=FALSE}
 Data_PRS_GRS <- data.table::fread(file.path(params$datapath,'data/Table_ClinData_PRS_GRS_20231130.csv'))
-
 OutputGRS_ILCCO_LORD_CaG <- data.table::fread(file.path(params$datapath,"data/OutputGRS_ILCCO_LORD_CaG.profile"), header=T)
-
 
 Data_PRS_GRS1<- merge(Data_PRS_GRS, OutputGRS_ILCCO_LORD_CaG,by="IID")
 ```
 
 
-```{r data analysis, include=FALSE}
+```{r data cleanup, include=FALSE}
 #NAs
 Data_PRS_GRS$Lung_cancer<-as.factor(Data_PRS_GRS$Lung_cancer)
 Data_PRS_GRS$Lung_cancer<- ifelse(Data_PRS_GRS$Lung_cancer==0, "Controls","Cases")
@@ -83,10 +84,10 @@ Data_PRS_GRS1$Lung_cancer <- car::recode(Data_PRS_GRS1$Lung_cancer, "'Controls'=
 Data_PRS_GRS1$rs1051730 <- as.factor(Data_PRS_GRS1$rs1051730)
 Data_PRS_GRS1$rs1051730<- relevel(Data_PRS_GRS1$rs1051730, "GG")
 
-Clinical_characteristics<- table1(~Age+ Sex+ BMI+ tabagism+ Smoking_years+ Histologic_type+ Pathologic_stage+ PRS_LORD_CaG + GRS_Bosse_44_unweighted + GRS_Bosse_44_weighted + GRS_Byun_38_unweighted + GRS_Byun_38_weighted + rs1051730| Lung_cancer, data=Data_PRS_GRS)
+#Clinical_characteristics<- table1(~Age+ Sex+ BMI+ tabagism+ Smoking_years+ Histologic_type+ Pathologic_stage+ PRS_LORD_CaG + GRS_Bosse_44_unweighted + GRS_Bosse_44_weighted + GRS_Byun_38_unweighted + GRS_Byun_38_weighted + rs1051730| Lung_cancer, data=Data_PRS_GRS)
 #Clinical_characteristics
 
-Clinical_characteristics1<- table1(~Age+ Sex+ BMI+ tabagism+ Smoking_years+ Histologic_type+ Pathologic_stage+ PRS_LORD_CaG + GRS_Bosse_44_unweighted_z + GRS_Bosse_44_weighted_z + GRS_Byun_38_unweighted_z + GRS_Byun_38_weighted_z + rs1051730| Lung_cancer, data=Data_PRS_GRS1)
+#Clinical_characteristics1<- table1(~Age+ Sex+ BMI+ tabagism+ Smoking_years+ Histologic_type+ Pathologic_stage+ PRS_LORD_CaG + GRS_Bosse_44_unweighted_z + GRS_Bosse_44_weighted_z + GRS_Byun_38_unweighted_z + GRS_Byun_38_weighted_z + rs1051730| Lung_cancer, data=Data_PRS_GRS1)
 #Clinical_characteristics1
 
 
@@ -132,8 +133,8 @@ print(chisq.test(GRS_Byun_38_weighted))
 print(chisq.test(GRS_rs1051730))
 
 # summarise 
-Number_cases<- table1(~Gw_PRS_group + GRS_Bosse_44_unweighted_group + GRS_Bosse_44_weighted_group + GRS_Byun_38_unweighted_group + GRS_Byun_38_weighted_group + rs1051730| Lung_cancer, data=Data_PRS_GRS1)
-Number_cases
+#Number_cases<- table1(~Gw_PRS_group + GRS_Bosse_44_unweighted_group + GRS_Bosse_44_weighted_group + GRS_Byun_38_unweighted_group + GRS_Byun_38_weighted_group + rs1051730| Lung_cancer, data=Data_PRS_GRS1)
+#Number_cases
 
 ###SNP as number of alleles
 Data_PRS_GRS1$rs1051730_alleles = 0
@@ -141,8 +142,63 @@ Data_PRS_GRS1$rs1051730_alleles[Data_PRS_GRS1$rs1051730=='AA']  = 2
 Data_PRS_GRS1$rs1051730_alleles[Data_PRS_GRS1$rs1051730=='GA' ]  =  1
 Data_PRS_GRS1$rs1051730_alleles[Data_PRS_GRS1$rs1051730=='GG'] =  0
 Data_PRS_GRS1$rs1051730_alleles = as.numeric(Data_PRS_GRS1$rs1051730_alleles)
+```
+
+```{r regression models litterature, include=FALSE}
+PRS_litt <- read.csv(file.path(params$datapath,'data/Table_ClinData_PRS_GRS_20231214.csv'))
+###SNP as number of alleles
+PRS_litt$rs1051730_alleles = 0
+PRS_litt$rs1051730_alleles[PRS_litt$rs1051730=='AA']  = 2
+PRS_litt$rs1051730_alleles[PRS_litt$rs1051730=='GA' ]  =  1
+PRS_litt$rs1051730_alleles[PRS_litt$rs1051730=='GG'] =  0
+PRS_litt$rs1051730_alleles = as.numeric(PRS_litt$rs1051730_alleles)
+
+glm_models = NULL
+values = c("PRS_LORD_CaG","GRS_Bosse_44_unweighted","GRS_Bosse_44_weighted","GRS_Byun_38_unweighted",
+"GRS_Byun_38_weighted","GRS_Bosse_9_unweighted","GRS_Bosse_9_weighted",
+"GRS_Byun_13_unweighted","GRS_Byun_13_weighted","GRS_Dai_19_unweighted","GRS_Dai_19_weighted","GRS_Shi_6_unweighted",
+"GRS_Shi_6_weighted","GRS_Graff_102_unweighted","GRS_Graff_102_weighted","GRS_Jia_19_unweighted","GRS_Jia_19_weighted",
+"GRS_Fritsche_14_unweighted","GRS_Fritsche_14_weighted","GRS_Fritsche_19_unweighted","GRS_Fritsche_19_weighted","GRS_Hung_35_unweighted",
+"GRS_Hung_35_weighted","GRS_Hung_125_unweighted","GRS_Hung_125_weighted","GRS_Zhang_32_unweighted","GRS_Zhang_32_weighted",
+"rs1051730_alleles")
+
+for(i in seq_along(values))
+  {
+  #data
+  data = PRS_litt[,colnames(PRS_litt) %in% c('Lung_cancer',values[i])]
+  
+  #Z score normalisation
+  if(length(grep('weight',colnames(data)[2]))==1) data[,2] <- (data[,2]-mean(data[,2]))/sd(data[,2])
+  
+  #regression models
+  regression_model <- glm(Lung_cancer ~ . , data = data, family = binomial)
+  
+  #OR
+  model_table <- broom::tidy(regression_model,conf.int = T)
+  model_table = model_table[model_table$term!="(Intercept)",]
+  model_table <- model_table %>% mutate(odds_ratio = exp(estimate))
+  
+  #LRM 
+  lrm_model <- rms::lrm(Lung_cancer~., data=data)
+  model_table$r2 = lrm_model$stats[c("R2")]
+  model_table$AUC =  lrm_model$stats[c("C")]
+  model_table$PRS = gsub('_weighted','',model_table$term)
+  model_table$PRS = gsub('_unweighted','',model_table$PRS)
+  model_table$PRS = gsub('GRS','PRS',model_table$PRS)
+  model_table$Type = ifelse(length(grep('_weighted',model_table$term)),'weigthted','unweighted')
+  
+  #final cbind...
+  glm_models = rbind(glm_models,model_table)
+  
+  print(paste0('Done ',i,': ', colnames(data)[2]))
+}
+
+write.csv(glm_models,file.path(params$datapath,'results/glm_models.csv'),row.names = F)
+
+```
 
 
+```{r regression models, include=FALSE}
 #regression model of different PRS
 model.Gw_PRS <- glm(Lung_cancer ~ PRS_LORD_CaG , data = Data_PRS_GRS1, family = binomial)
   model.GRS_Bosse_44_unweighted <- glm(Lung_cancer ~ GRS_Bosse_44_unweighted_z , data = Data_PRS_GRS1, family = binomial)
@@ -166,8 +222,7 @@ model.Gw_PRS <- glm(Lung_cancer ~ PRS_LORD_CaG , data = Data_PRS_GRS1, family = 
   model_table <- rbind(model_table1, model_table2, model_table3, model_table4, model_table5, model_table6,model_table7)
   # Calculate odds ratios and their confidence intervals
   model_table$estimate <- ifelse(model_table$term == "(Intercept)",0, model_table$estimate)
-  model_table <- model_table %>%
-    mutate(odds_ratio = exp(estimate))
+  model_table <- model_table %>% mutate(odds_ratio = exp(estimate))
   
 #variance_explained 
   # lrm model
@@ -234,11 +289,123 @@ CI_GRS_Bosse_44_unweighted <- CI.Rsq(model_tab7$R2[2],24012,1, level = .95)
 
 model.tab.lrm1 <- left_join(model_tab7,CIg, by= "term")
 
+
+####calcul du Odd Ratio par quintile
+Data_PRS_GRS1$PRS_quintile <- with(Data_PRS_GRS1, cut(PRS_LORD_CaG, breaks = quantile(PRS_LORD_CaG,probs =seq(0,1,by=0.2),na.rm = TRUE), labels= c("1","2","3","4","5"), include.lowest= TRUE))
+Data_PRS_GRS1$PRS_quintile <- relevel(Data_PRS_GRS1$PRS_quintile, "1")
+
+model.PRS <- glm(Lung_cancer ~ PRS_quintile, data = Data_PRS_GRS1, family = binomial, na.action = na.omit)
+
+model.PRS_table <- broom::tidy(model.PRS,conf.int =T)
+model.PRS_table$estimate <- ifelse(model.PRS_table$term == "(Intercept)",0, model.PRS_table$estimate)
+  model.PRS_table <- model.PRS_table %>%
+    mutate(odds_ratio = exp(estimate))
+  
+model.PRS_table$std.error <- ifelse(model.PRS_table$term == "(Intercept)", NA, model.PRS_table$std.error)
+model.PRS_table$term  <- ifelse(model.PRS_table$term == "(Intercept)",1, model.PRS_table$term)
+
+  
+#save data
+write.csv(model.PRS_table,file.path(params$datapath,'results/model.PRS_table.csv'),row.names = F)
 write.csv(model.tab.lrm1,file.path(params$datapath,'results/model.tab.lrm1.csv'),row.names = F)
 write.csv(model_table,file.path(params$datapath,'results/model_table.csv'),row.names = F)
 ```
 
-```{r Figure 1}
+
+
+```{r split the GLM by tabagism/top-bottom 20/combined}
+####calcul du Odd Ratio par bottom 20, 20-80, top 20 ET par status tabagique) 
+#Data_PRS_GRS_rmNAs = Data_PRS_GRS[!is.na(Data_PRS_GRS$tabagism),]
+Data_PRS_GRS_rmNAs = Data_PRS_GRS
+quantile = quantile(Data_PRS_GRS_rmNAs$PRS_LORD_CaG,c(0,0.2,0.8,1))
+
+#recode tabagism
+Data_PRS_GRS_rmNAs$tabagism_recoded = NA
+Data_PRS_GRS_rmNAs$tabagism_recoded[Data_PRS_GRS_rmNAs$tabagism == "Current_smoker"] = 'Ever smoker'
+Data_PRS_GRS_rmNAs$tabagism_recoded[Data_PRS_GRS_rmNAs$tabagism == "Former_smoker"] = 'Ever smoker'
+Data_PRS_GRS_rmNAs$tabagism_recoded[Data_PRS_GRS_rmNAs$tabagism == "Never_smoker"] = 'Never smoker'
+
+#topbottom 20%
+Data_PRS_GRS_rmNAs$bottom_top20 = 'bottom20'
+Data_PRS_GRS_rmNAs$bottom_top20[Data_PRS_GRS_rmNAs$PRS_LORD_CaG > quantile[2] & Data_PRS_GRS_rmNAs$PRS_LORD_CaG <= quantile[3]] = '20-80'
+Data_PRS_GRS_rmNAs$bottom_top20[Data_PRS_GRS_rmNAs$PRS_LORD_CaG > quantile[3]] = 'top20'
+
+#topbottom and tabagism                           
+Data_PRS_GRS_rmNAs$bottom_top20_tabagism = paste0(Data_PRS_GRS_rmNAs$bottom_top20,' ',Data_PRS_GRS_rmNAs$tabagism_recoded)                          
+Data_PRS_GRS_rmNAs$bottom_top20_tabagism = factor(Data_PRS_GRS_rmNAs$bottom_top20_tabagism, levels = c("bottom20 Never smoker","bottom20 Ever smoker","20-80 Never smoker","20-80 Ever smoker","top20 Never smoker","top20 Ever smoker"))
+
+Data_PRS_GRS_rmNAs$bottom_top20 = factor(Data_PRS_GRS_rmNAs$bottom_top20, levels = c('bottom20','20-80','top20'))
+Data_PRS_GRS_rmNAs$tabagism_recoded = factor(Data_PRS_GRS_rmNAs$tabagism_recoded,levels= c('Never smoker','Ever smoker'))
+
+variables = c('bottom_top20_tabagism','bottom_top20','tabagism_recoded')
+models_astibble = list()
+Data_PRS_GRS_rmNAs_df = as.data.frame(Data_PRS_GRS_rmNAs)
+
+for(i in 1:3)
+{
+  data = Data_PRS_GRS_rmNAs_df[,colnames(Data_PRS_GRS_rmNAs_df) %in% c('Lung_cancer',variables[i])]
+  
+models <- glm(Lung_cancer ~ ., data = data, family = binomial, na.action = na.omit)
+
+models_astibble[[i]] <- broom::tidy(models,conf.int =T)
+models_astibble[[i]]$estimate <- ifelse(models_astibble[[i]]$term == "(Intercept)",0, models_astibble[[i]]$estimate)
+models_astibble[[i]]$std.error <- ifelse(models_astibble[[i]]$term == "(Intercept)", NA, models_astibble[[i]]$std.error)
+models_astibble[[i]]$term  <- ifelse(models_astibble[[i]]$term == "(Intercept)",1, models_astibble[[i]]$term)
+models_astibble[[i]]$odds_ratio = exp(models_astibble[[i]]$estimate)
+models_astibble[[i]]$N = table(data[,2])
+}
+
+saveRDS(models_astibble,file.path(params$datapath,'results/model.PRS20_80.RDS'))
+
+
+```
+
+
+```{r Figure 2 improved}
+glm_models = read.csv(file.path(params$datapath,'results/glm_models.csv'))
+glm_models$facets = c(rep('A',14),rep('B',14))
+
+# OR
+plots_or <- ggplot(glm_models, aes(x = PRS, y = odds_ratio,group = term,fill = Type )) +
+  geom_bar(stat = "identity" , position='dodge') + 
+  geom_hline(yintercept=1,linetype="dashed") +
+  scale_fill_brewer(palette="Paired") + 
+  facet_grid(.~facets, scales = "free_x", space = "free_x",switch = 'y') + coord_cartesian(ylim=c(1,1.5)) +
+#  geom_boxplot(position = position_dodge2(preserve = "single")  ,lwd = 0.9) + 
+ # geom_hline(yintercept=1,linetype="dashed") +
+  labs(title = "", x= "Risk score type", y = "Odds ratio") +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"),
+        legend.position='none',
+        plot.title = element_text(size=12, hjust = 0.5),
+        axis.text.x = element_text(size = 8,angle = 45, hjust = 1),
+        axis.title.y = element_text(size = 10))
+
+#PVE 
+plots_pve <- ggplot(pve) + 
+  geom_boxplot(aes(PRS, r2,group = term,color = Type ),position = position_dodge2(preserve = "single"),lwd = 0.9,show.legend = FALSE) + 
+  geom_bar(aes(R2,group = term,fill = Type )) + ylim(0.002,0.02) + #(adding the bars, just to show a better legend)
+  labs(title = "", x= "Risk score type", y = bquote('Variance Explained '(R^2)) ) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"),
+        legend.position='right',
+        plot.title = element_text(size=12, hjust = 0.5),
+        axis.text.x = element_text(size = 8,angle = 45, hjust = 1),
+        axis.title.y = element_text(size = 10))
+  
+
+pdf(file.path(params$datapath,'results/Figure2.pdf'),width = 6,height = 4)
+(plots_or | plots_pve) + plot_annotation(tag_levels = 'A')
+dev.off()
+```
+
+
+
+```{r Figure 2}
 pve = read.csv(file.path(params$datapath,'results/model.tab.lrm1.csv'))
 or = read.csv(file.path(params$datapath,'results/model_table.csv'))
 
@@ -265,20 +432,168 @@ pve$PRS = gsub('_alleles','',pve$PRS)
 # OR
 plots_or <- ggplot(or, aes(PRS, odds_ratio,group = term,color = Type )) +
   geom_boxplot(position = position_dodge2(preserve = "single")  ,lwd = 0.9) + 
-  theme_minimal() +
+  geom_hline(yintercept=1,linetype="dashed") +
+  ylim(1,1.4) +
   labs(title = "", x= "Risk score type", y = "Odds ratio") +
-  theme(strip.background = element_rect(fill="lightgray",colour = 'lightgray'),strip.text.x = element_text(size = 8,margin=margin()),legend.position='none',plot.title = element_text(size=12, hjust = 0.5), axis.text.x = element_text(size = 8,angle = 45, hjust = 1),axis.title.y = element_text(size = 10))
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"),
+        legend.position='none',
+        plot.title = element_text(size=12, hjust = 0.5),
+        axis.text.x = element_text(size = 8,angle = 45, hjust = 1),
+        axis.title.y = element_text(size = 10))
 
 #PVE 
 plots_pve <- ggplot(pve) + 
-  geom_boxplot( aes(PRS, R2,group = term,color = Type ),position = position_dodge2(preserve = "single"),lwd = 0.9,show.legend = FALSE) + 
+  geom_boxplot(aes(PRS, R2,group = term,color = Type ),position = position_dodge2(preserve = "single"),lwd = 0.9,show.legend = FALSE) + 
   geom_bar(aes(R2,group = term,fill = Type )) + ylim(0.002,0.02) + #(adding the bars, just to show a better legend)
-  theme_minimal() +
-  labs(title = "", x= "Risk score type", y = "Percentage of Variance Explained") +
-  theme(strip.background = element_rect(fill="lightgray",colour = 'lightgray'),strip.text.x = element_text(size = 8,margin=margin()),legend.position='right',plot.title = element_text(size=12, hjust = 0.5), axis.text.x = element_text(size = 8,angle = 45, hjust = 1),axis.title.y = element_text(size = 10))
+  labs(title = "", x= "Risk score type", y = bquote('Variance Explained '(R^2)) ) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"),
+        legend.position='right',
+        plot.title = element_text(size=12, hjust = 0.5),
+        axis.text.x = element_text(size = 8,angle = 45, hjust = 1),
+        axis.title.y = element_text(size = 10))
+  
 
 pdf(file.path(params$datapath,'results/Figure2.pdf'),width = 6,height = 4)
 (plots_or | plots_pve) + plot_annotation(tag_levels = 'A')
+dev.off()
+```
+
+
+
+```{r FIGURE 3}
+or_perquintile = read.csv(file.path(params$datapath,'results/model.PRS_table.csv'))
+or_perquintile$labels = c('1','2','3','4','5')
+
+
+#density plot
+Data_PRS_GRS1$Cohort <- factor(Data_PRS_GRS1$Lung_cancer, levels = c(1,0), labels = c("LORD", "CARTaGENE"))
+PRS_means = Data_PRS_GRS1 %>% group_by(Cohort) %>% summarise(grp.means = mean(PRS_LORD_CaG) )
+
+density_plots = ggplot(Data_PRS_GRS1, aes(x=PRS_LORD_CaG,fill = Cohort)) + 
+  geom_density(alpha = 0.4) +
+  geom_vline(data=PRS_means , aes(xintercept=grp.means, color=Cohort),
+             linetype="dashed", show.legend = F) + 
+  xlab("PRS") +
+  ylab("Density") +
+  theme(legend.position = c(0.8, 0.2),
+        legend.key.size = unit(0.2, 'cm'),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"))
+
+
+quintile_plot <- ggplot(or_perquintile, aes(x = labels, y = odds_ratio,group=1)) + 
+ # geom_line(linetype = "dotted")+
+  geom_point(stat = "identity",color='black',size = 3) +
+  geom_hline(yintercept=1,linetype="dashed") + 
+  xlab("Quintiles of PRS") +
+  ylab("Odds ratio") +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"))
+
+
+# Regression model
+model.Gw_PRS <- glm(Lung_cancer ~ PRS_LORD_CaG , data = Data_PRS_GRS1, family = binomial,  na.action = na.omit)
+# Get predicted probabilities for test data
+Data_PRS_GRS1$predict  <-  predict(model.Gw_PRS, Data_PRS_GRS1, type="response")
+# Plot ROC curve
+P4 <- roc(Data_PRS_GRS1$Lung_cancer, Data_PRS_GRS1$predict, ci=TRUE, boot.n=1000, ci.alpha=0.9, stratified=FALSE,plot=FALSE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=FALSE,print.auc=TRUE, show.thres=TRUE,quiet= TRUE)
+text_annotation = paste0('AUC: ',round(P4$ci[2],2),' (',round(P4$ci[1],2),'-',round(P4$ci[3],2),')')
+
+roc_curve = ggroc(P4) +
+  geom_segment(aes(x = 1, y = 0, xend = 0, yend = 1),show.legend = F, linetype = 'dashed') + 
+  annotate(geom="text", x=0.4, y=0.2, label=text_annotation) +
+  theme(legend.position = c(0.8, 0.8),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"))
+
+#table
+table = read.delim(file.path(params$datapath,'data/Number_PRS_quantile1.txt'), check.names = F,row.names = 1)
+
+pdf(file.path(params$datapath,'results/Figure3.pdf'),width = 10,height = 6)
+((density_plots | roc_curve | quintile_plot) / gridExtra::tableGrob(table)) + plot_layout(height = c(4,2)) + plot_annotation(tag_levels = 'A')
+dev.off()
+```
+
+
+
+```{r FIGURE 4}
+or4 = readRDS(file.path(params$datapath,'results/model.PRS20_80.RDS'))
+
+#clean up
+or4[[1]]$term = factor(or4[[1]]$term, levels = c("1","bottom_top20_tabagismbottom20 Ever smoker","bottom_top20_tabagism20-80 Never smoker","bottom_top20_tabagism20-80 Ever smoker","bottom_top20_tabagismtop20 Never smoker","bottom_top20_tabagismtop20 Ever smoker"))
+
+or4[[1]]$Type = c('Bottom 20','Bottom 20','20-80','20-80','Top 20','Top 20')
+or4[[1]]$Type = factor(or4[[1]]$Type , level = c('Bottom 20','20-80','Top 20'))
+or4[[1]]$Smoking = rep(c('Never smoker','Ever smoker'),3)
+or4[[1]]$Smoking = factor(or4[[1]]$Smoking, levels = c('Never smoker','Ever smoker'))
+
+or4[[2]]$term = c('Bottom 20','20-80','Top 20'); or4[[2]]$term = factor(or4[[2]]$term, level = c('Bottom 20','20-80','Top 20') )
+or4[[3]]$term = c('Never smoker','Ever smoker'); or4[[3]]$term = factor(or4[[3]]$term, level = c('Never smoker','Ever smoker') )
+
+
+plots_all <- ggplot(or4[[1]],aes(x = Type, y= odds_ratio,fill = Smoking)) + 
+  geom_bar(stat = "identity" , position = position_dodge(),width = 0.6) + 
+  geom_hline(yintercept=1,linetype="dashed") +
+  scale_fill_brewer(palette="Paired") +
+  geom_text(aes(label=N), vjust=-0.4, color="azure4",
+            position = position_dodge(0.6), size=3.5) +
+  ylim(c(0,20)) +
+  labs(title = "Smoking and genetic combinations ~ 17X increase", x= "Combination of genetic risk and smoking subgroups", y = "Odds ratio") +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"),
+        legend.position='right') #,
+       # plot.title = element_text(size=12, hjust = 0.5),
+       # axis.text.x = element_text(size = 8,angle = 45, hjust = 1),
+       # axis.title.y = element_text(size = 10))
+
+plots_smoking <- ggplot(or4[[3]],aes(x = term, y= odds_ratio)) + 
+  geom_bar(stat = "identity" , fill = 'burlywood4', position = position_dodge(),width = 0.5) + 
+  geom_hline(yintercept=1,linetype="dashed") +
+  geom_text(aes(label=N), vjust=-0.4, color="azure4",
+            position = position_dodge(0.9), size=3.5) +
+  ylim(c(0,12)) +
+  labs(title = "Smoking ~ 9,8X increase", x= "Smoking groups", y = "Odds ratio") +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"),
+        legend.position='right')#,
+       # plot.title = element_text(size=12, hjust = 0.5),
+       # axis.text.x = element_text(size = 8,angle = 45, hjust = 1),
+       # axis.title.y = element_text(size = 10))
+
+plots_top_bottom <- ggplot(or4[[2]],aes(term, odds_ratio)) + 
+  geom_bar(stat = "identity" , fill = 'darkorchid3', position = position_dodge(),width = 0.75) + 
+  geom_hline(yintercept=1,linetype="dashed") +
+  geom_text(aes(label=N), vjust=-0.4, color="azure4",
+            position = position_dodge(0.9), size=3.5) + 
+  ylim(c(0,2.5)) +
+  labs(title = "Top vs. bottom quintiles ~ 2.2X increase", x= "Genetic risk groups", y = "Odds ratio") +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"),
+        legend.position='right')#,
+       # plot.title = element_text(size=12, hjust = 0.5),
+       # axis.text.x = element_text(size = 8,angle = 45, hjust = 1),
+       # axis.title.y = element_text(size = 10))
+
+pdf(file.path(params$datapath,'results/Figure4.pdf'),width = 8,height = 8)
+(plots_smoking | plots_top_bottom)  / plots_all + plot_annotation(tag_levels = 'A')
 dev.off()
 ```
 
