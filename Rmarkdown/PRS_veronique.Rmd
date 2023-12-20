@@ -377,7 +377,7 @@ plots_smoking <- ggplot(models_ALL[[2]],aes(x = Type, y= odds_ratio,fill = Smoki
   geom_bar(stat = "identity" , position = position_dodge(),width = 0.6) + 
   geom_hline(yintercept=1,linetype="dashed") +
   scale_fill_manual('Smoking',values=brewer.pal(11,'BrBG')[c(5,1)],
-                    labels = c("Never              ","Ever")) +
+                    labels = c("Never","Ever")) +
   geom_signif(y_position = c(8,10,12), xmin = c(0.85,1.85,2.85), xmax = c(1.15,2.15,3.15),
     annotation = c("OR = 7.7X***","OR = 9.8X***","OR = 11.3X***"), tip_length = 0.01) +
   ylim(c(0,13)) +
@@ -394,7 +394,7 @@ plots_quintile <- ggplot(models_ALL[[1]],aes(x = Smoking, y= odds_ratio,fill = T
   geom_bar(stat = "identity" , position = position_dodge(),width = 0.6) + 
   geom_hline(yintercept=1,linetype="dashed") +
   scale_fill_manual('Genetic Risk',values=brewer.pal(11,'PRGn')[c(5,3,1)],
-                    labels =  c("Low","Intermediate    ","High")) +
+                    labels =  c("Low","Intermediate","High")) +
   geom_signif(y_position = c(1.7,2.3), xmin = c(0.8,1.8), xmax = c(1.2,2.2),
     annotation = c("OR = 1.5X*","OR = 2.2X***"), tip_length = 0.01) +
   ylim(c(0,2.5)) +
@@ -407,7 +407,7 @@ plots_quintile <- ggplot(models_ALL[[1]],aes(x = Smoking, y= odds_ratio,fill = T
 
 
 pdf(file.path(params$datapath,'results/Figure4.pdf'),width = 8,height = 12)
-plots_quintile / plots_smoking / plots_all + plot_annotation(tag_levels = 'A') 
+(plots_quintile / plots_smoking / plots_all + plot_annotation(tag_levels = 'A'))  & theme(legend.justification = "left")
 dev.off()
 ```
 
