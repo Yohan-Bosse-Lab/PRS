@@ -1,6 +1,6 @@
 ---
 title: "PRS veronique"
-author: "Véronique Boumtje. Some modifcations by Sébastien Renaut"
+author: "Véronique Boumtje. Some modifcations and plotting adjustemnts by Sébastien Renaut"
 date: "`r Sys.Date()`"
 output:
   html_document:
@@ -22,6 +22,7 @@ library(psychometric)
 library(pROC)
 library(RColorBrewer)
 library(ggsignif)
+library(gridExtra)
 ```
 
 
@@ -287,10 +288,10 @@ or_perquintile = read.csv(file.path(params$datapath,'results/model.PRS_table.csv
 or_perquintile$labels = c('1','2','3','4','5')
 
 #density plot
-Data_PRS_GRS1$Cohort <- factor(Data_PRS_GRS1$Lung_cancer, levels = c(1,0), labels = c("LORD", "CARTaGENE"))
-PRS_means = Data_PRS_GRS1 %>% group_by(Cohort) %>% summarise(grp.means = mean(PRS_LORD_CaG) )
+PRS_litt_df$Cohort <- factor(PRS_litt_df$Lung_cancer, levels = c(1,0), labels = c("LORD", "CARTaGENE"))
+PRS_means = PRS_litt_df %>% group_by(Cohort) %>% summarise(grp.means = mean(PRS_LORD_CaG) )
 
-density_plots = ggplot(Data_PRS_GRS1, aes(x=PRS_LORD_CaG,fill = Cohort)) + 
+density_plots = ggplot(PRS_litt_df, aes(x=PRS_LORD_CaG,fill = Cohort)) + 
   geom_density(alpha = 0.4) +
   geom_vline(data=PRS_means , aes(xintercept=grp.means, color=Cohort),
              linetype="dashed", show.legend = F) + 
@@ -323,11 +324,11 @@ quintile_plot <- ggplot(or_perquintile, aes(x = labels, y = odds_ratio,group=1))
 
 
 # Regression model
-model.Gw_PRS <- glm(Lung_cancer ~ PRS_LORD_CaG , data = Data_PRS_GRS1, family = binomial,  na.action = na.omit)
+model.Gw_PRS <- glm(Lung_cancer ~ PRS_LORD_CaG , data = PRS_litt_df, family = binomial,  na.action = na.omit)
 # Get predicted probabilities for test data
-Data_PRS_GRS1$predict  <-  predict(model.Gw_PRS, Data_PRS_GRS1, type="response")
+PRS_litt_df$predict  <-  predict(model.Gw_PRS, PRS_litt_df, type="response")
 # Plot ROC curve
-P4 <- roc(Data_PRS_GRS1$Lung_cancer, Data_PRS_GRS1$predict, ci=TRUE, boot.n=1000, ci.alpha=0.9, stratified=FALSE,plot=FALSE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=FALSE,print.auc=TRUE, show.thres=TRUE,quiet= TRUE)
+P4 <- roc(PRS_litt_df$Lung_cancer, PRS_litt_df$predict, ci=TRUE, boot.n=1000, ci.alpha=0.9, stratified=FALSE,plot=FALSE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=FALSE,print.auc=TRUE, show.thres=TRUE,quiet= TRUE)
 text_annotation = paste0('AUC: ',round(P4$ci[2],2),' (',round(P4$ci[1],2),'-',round(P4$ci[3],2),')')
 
 roc_curve = ggroc(P4) +
@@ -343,7 +344,7 @@ roc_curve = ggroc(P4) +
 table = read.delim(file.path(params$datapath,'data/Number_PRS_quantile1.txt'), check.names = F,row.names = 1)
 
 pdf(file.path(params$datapath,'results/Figure3.pdf'),width = 10,height = 6)
-((density_plots | roc_curve | quintile_plot) / gridExtra::tableGrob(table)) + plot_layout(height = c(4,2)) + plot_annotation(tag_levels = 'A')
+((density_plots | roc_curve | quintile_plot) / tableGrob(table)) + plot_layout(height = c(4,2)) + plot_annotation(tag_levels = 'A')
 dev.off()
 ```
 
@@ -355,7 +356,8 @@ models_ALL = readRDS(file.path(params$datapath,'results/models_ALL.RDS'))
 plots_all <- ggplot(models_ALL[[3]],aes(x = Type, y= odds_ratio,fill = term)) + 
   geom_bar(stat = "identity",position = position_dodge(),width = 0.6) + 
   geom_hline(yintercept=1,linetype="dashed") +
-  scale_fill_manual('Combined effect',values=brewer.pal(8,'Paired')[c(1:4,7:8)]) +
+  scale_fill_manual('Combined effect',values=brewer.pal(8,'Paired')[c(1:4,7:8)],
+                    labels = c("Low ~ Never","Low ~ Ever","Interm. ~ Never","Interm. ~ Ever","High ~ Never","High ~ Ever")) +
   geom_text(aes(label=N), vjust=-0.4, color="gray20",
             position = position_dodge(0.6)) +
   ylim(c(0,22)) +
@@ -374,7 +376,8 @@ plots_all <- ggplot(models_ALL[[3]],aes(x = Type, y= odds_ratio,fill = term)) +
 plots_smoking <- ggplot(models_ALL[[2]],aes(x = Type, y= odds_ratio,fill = Smoking)) + 
   geom_bar(stat = "identity" , position = position_dodge(),width = 0.6) + 
   geom_hline(yintercept=1,linetype="dashed") +
-  scale_fill_manual('Smoking',values=brewer.pal(11,'BrBG')[c(5,1)]) +
+  scale_fill_manual('Smoking',values=brewer.pal(11,'BrBG')[c(5,1)],
+                    labels = c("Never              ","Ever")) +
   geom_signif(y_position = c(8,10,12), xmin = c(0.85,1.85,2.85), xmax = c(1.15,2.15,3.15),
     annotation = c("OR = 7.7X***","OR = 9.8X***","OR = 11.3X***"), tip_length = 0.01) +
   ylim(c(0,13)) +
@@ -390,7 +393,8 @@ plots_smoking <- ggplot(models_ALL[[2]],aes(x = Type, y= odds_ratio,fill = Smoki
 plots_quintile <- ggplot(models_ALL[[1]],aes(x = Smoking, y= odds_ratio,fill = Type)) + 
   geom_bar(stat = "identity" , position = position_dodge(),width = 0.6) + 
   geom_hline(yintercept=1,linetype="dashed") +
-  scale_fill_manual('Genetic Risk',values=brewer.pal(11,'PRGn')[c(5,3,1)])+
+  scale_fill_manual('Genetic Risk',values=brewer.pal(11,'PRGn')[c(5,3,1)],
+                    labels =  c("Low","Intermediate    ","High")) +
   geom_signif(y_position = c(1.7,2.3), xmin = c(0.8,1.8), xmax = c(1.2,2.2),
     annotation = c("OR = 1.5X*","OR = 2.2X***"), tip_length = 0.01) +
   ylim(c(0,2.5)) +
