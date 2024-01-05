@@ -69,7 +69,11 @@ for(i in seq_along(values))
   
   #LRM 
   lrm_model <- rms::lrm(Lung_cancer~., data=data)
+  
   model_table$r2 = lrm_model$stats[c("R2")]
+  model_table$r2_LCL = CI.Rsq(model_table$r2,n=24012,k=1)$LCL
+  model_table$r2_UCL = CI.Rsq(model_table$r2,n=24012,k=1)$UCL
+
   model_table$AUC =  lrm_model$stats[c("C")]
   model_table$PRS = gsub('_weighted','',model_table$term)
   model_table$PRS = gsub('_unweighted','',model_table$PRS)
@@ -84,6 +88,10 @@ for(i in seq_along(values))
   
   model_table$categories = categories[i]
   
+  #95% CI for OR
+  model_table$ymin_OR = exp(model_table$estimate - (1.96 * model_table$std.error))
+  model_table$ymax_OR = exp(model_table$estimate + (1.96 * model_table$std.error))
+  
   #final cbind...
   glm_models = rbind(glm_models,model_table)
   
@@ -96,18 +104,24 @@ write.csv(glm_models,file.path(params$datapath,'results/glm_models.csv'),row.nam
 
 ```{r regression models per quintile, include=FALSE}
 ####calcul du Odd Ratio par quintile
-PRS_litt$PRS_quintile <- with(PRS_litt, cut(PRS_LORD_CaG, breaks = quantile(PRS_LORD_CaG,probs =seq(0,1,by=0.2),na.rm = TRUE), labels= c("1","2","3","4","5"), include.lowest= TRUE))
+#PRS_litt$PRS_quintile <- with(PRS_litt, cut(PRS_LORD_CaG, breaks = quantile(PRS_LORD_CaG,probs =seq(0,1,by=0.2),na.rm = TRUE), labels= c("1","2","3","4","5"), include.lowest= TRUE))
+PRS_litt$PRS_quintile <- with(PRS_litt, cut(PRS_LORD_CaG, breaks = quantile(PRS_LORD_CaG,probs = c(0,0.8,0.9,0.95,0.99),na.rm = TRUE), labels= c("1","2","3","4"), include.lowest= TRUE))
+
 PRS_litt$PRS_quintile <- relevel(PRS_litt$PRS_quintile, "1")
 
 model.PRS <- glm(Lung_cancer ~ PRS_quintile, data = PRS_litt, family = binomial, na.action = na.omit)
 
-model.PRS_table <- broom::tidy(model.PRS,conf.int =T)
+model.PRS_table <- broom::tidy(model.PRS)
 model.PRS_table$estimate <- ifelse(model.PRS_table$term == "(Intercept)",0, model.PRS_table$estimate)
   model.PRS_table <- model.PRS_table %>%
     mutate(odds_ratio = exp(estimate))
   
-model.PRS_table$std.error <- ifelse(model.PRS_table$term == "(Intercept)", NA, model.PRS_table$std.error)
+#model.PRS_table$std.error <- ifelse(model.PRS_table$term == "(Intercept)", NA, model.PRS_table$std.error)
 model.PRS_table$term  <- ifelse(model.PRS_table$term == "(Intercept)",1, model.PRS_table$term)
+
+#95% CI for OR
+model.PRS_table$ymin_OR = exp(model.PRS_table$estimate - (1.96 * model.PRS_table$std.error))
+model.PRS_table$ymax_OR = exp(model.PRS_table$estimate + (1.96 * model.PRS_table$std.error))
 
 #save data
 write.csv(model.PRS_table,file.path(params$datapath,'results/model.PRS_table.csv'),row.names = F)
@@ -144,7 +158,6 @@ variables = c('genetic_risk_factor_tabagism','genetic_risk_factor','tabagism_rec
 smoking = c('Never','Ever')
 genetic_risk_factor = c('Low','Intermediate','High')
 
-
 for(c in 1:3){
     models = NULL
   
@@ -158,12 +171,16 @@ for(c in 1:3){
    
      #clean up 
      model$estimate <- ifelse(model$term == "(Intercept)",0, model$estimate)
-     model$std.error <- ifelse(model$term == "(Intercept)", NA, model$std.error)
+    # model$std.error <- ifelse(model$term == "(Intercept)", NA, model$std.error)
      model$p.value <- ifelse(model$term == "(Intercept)",0, model$p.value)
      model$odds_ratio = exp(model$estimate)
      model$Type = c('Low','Intermediate','High')
      model$Smoking = smoking[i]
  
+     #95% CI for OR
+     model$ymin_OR = exp(model$estimate - (1.96 * model$std.error))
+     model$ymax_OR = exp(model$estimate + (1.96 * model$std.error))
+     
      #save
      models =rbind(models,model)
      if(i==2) {
@@ -184,12 +201,16 @@ for(c in 1:3){
    
      #clean up
      model$estimate <- ifelse(model$term == "(Intercept)",0, model$estimate)
-     model$std.error <- ifelse(model$term == "(Intercept)", NA, model$std.error)
+    # model$std.error <- ifelse(model$term == "(Intercept)", NA, model$std.error)
      model$p.value <- ifelse(model$term == "(Intercept)",0, model$p.value)
      model$odds_ratio = exp(model$estimate)
      model$Type = c('Low','Intermediate','High')[i]
      model$Smoking = c('Never','Ever')
 
+     #95% CI for OR
+     model$ymin_OR = exp(model$estimate - (1.96 * model$std.error))
+     model$ymax_OR = exp(model$estimate + (1.96 * model$std.error))
+     
      #save
      models =rbind(models,model)
      if(i==3) {
@@ -207,7 +228,7 @@ for(c in 1:3){
 
     #clean up 
     model$estimate <- ifelse(model$term == "(Intercept)",0, model$estimate)
-    model$std.error <- ifelse(model$term == "(Intercept)", NA, model$std.error)
+   # model$std.error <- ifelse(model$term == "(Intercept)", NA, model$std.error)
     model$p.value <- ifelse(model$term == "(Intercept)",0, model$p.value)
     model$odds_ratio = exp(model$estimate)
     model$N = c(table(PRS_litt_df$genetic_risk_factor_tabagism))
@@ -215,6 +236,10 @@ for(c in 1:3){
     model$Smoking = factor(rep(c('Never','Ever'),3),level = c('Never','Ever'))
     model$term = factor(c("Low ~ Never","Low ~ Ever","Intermediate ~ Never","Intermediate ~ Ever","High ~ Never","High ~ Ever"),level = c("Low ~ Never","Low ~ Ever","Intermediate ~ Never","Intermediate ~ Ever","High ~ Never","High ~ Ever"))
 
+    #95% CI for OR
+    model$ymin_OR = exp(model$estimate - (1.96 * model$std.error))
+    model$ymax_OR = exp(model$estimate + (1.96 * model$std.error))
+    
     #save
     models_ALL[[c]] = model
     }
@@ -227,22 +252,27 @@ saveRDS(models_ALL,file.path(params$datapath,'results/models_ALL.RDS'))
 
 ```{r Figure 2 improved}
 glm_models = read.csv(file.path(params$datapath,'results/glm_models.csv'))
+
+#remove bosse_9 and buyn_13
+glm_models =  glm_models[(glm_models$term %in% c('GRS_Bossé_9_weighted','GRS_Bossé_9_unweighted','GRS_Byun_13_unweighted','GRS_Byun_13_weighted')) == F,]
+
 glm_models$categories[1]  = 'Genome-\nwide' 
-glm_models$categories[28] = 'Sentinel\nSNP'
+glm_models$categories[24] = 'Sentinel\nSNP'
 glm_models$categories = factor(glm_models$categories,levels= c('GWAS-SNP','Literature','Sentinel\nSNP','Genome-\nwide'))
 glm_models$term = factor(glm_models$term, levels = c("PRS_Genome-wide","GRS_Bossé_44_unweighted","GRS_Bossé_44_weighted","GRS_Byun_38_unweighted",
-"GRS_Byun_38_weighted","GRS_Bossé_9_unweighted","GRS_Bossé_9_weighted",
-"GRS_Byun_13_unweighted","GRS_Byun_13_weighted","GRS_Dai_19_unweighted","GRS_Dai_19_weighted","GRS_Shi_6_unweighted",
+"GRS_Byun_38_weighted","GRS_Dai_19_unweighted","GRS_Dai_19_weighted","GRS_Shi_6_unweighted",
 "GRS_Shi_6_weighted","GRS_Graff_102_unweighted","GRS_Graff_102_weighted","GRS_Jia_19_unweighted","GRS_Jia_19_weighted",
 "GRS_Fritsche_14_unweighted","GRS_Fritsche_14_weighted","GRS_Fritsche_19_unweighted","GRS_Fritsche_19_weighted","GRS_Hung_35_unweighted",
 "GRS_Hung_35_weighted","GRS_Hung_125_unweighted","GRS_Hung_125_weighted","GRS_Zhang_32_unweighted","GRS_Zhang_32_weighted",
 "rs1051730"))
 glm_models$Type = factor(glm_models$Type,levels = c('unweighted','weighted'))
-glm_models$PRS = factor(glm_models$PRS, levels = c("Genome-wide","Bossé_44","Byun_38","Bossé_9","Byun_13","Dai_19","Shi_6", "Graff_102",  "Jia_19","Fritsche_14","Fritsche_19","Hung_35","Hung_125","Zhang_32","rs1051730"))
+glm_models$PRS = factor(glm_models$PRS, levels = c("Genome-wide","Bossé_44","Byun_38","Dai_19","Shi_6", "Graff_102",  "Jia_19","Fritsche_14","Fritsche_19","Hung_35","Hung_125","Zhang_32","rs1051730"))
+
 
 # OR
 plots_or <- ggplot(glm_models, aes(x = PRS, y = odds_ratio,group = term,fill = Type)) +
-  geom_bar(stat = "identity" , position='dodge', width = c(0.5,rep(0.9,26),0.45)) + 
+  geom_bar(stat = "identity" , position='dodge', width = c(0.45,rep(0.9,22),0.45)) + 
+  geom_errorbar(aes(ymin= ymin_OR, ymax= ymax_OR), width = .2, position = position_dodge(.9)) +
   geom_hline(yintercept=1,linetype="dashed") +
   scale_fill_brewer(palette="Paired") + 
   facet_grid(.~categories, scales = "free", space = "free") +
@@ -260,7 +290,8 @@ plots_or <- ggplot(glm_models, aes(x = PRS, y = odds_ratio,group = term,fill = T
 
 #PVE 
 plots_pve <- ggplot(glm_models, aes(x = PRS, y = r2,group = term,fill = Type)) +
-  geom_bar(stat = "identity" , position='dodge', width = c(0.5,rep(0.9,26),0.45)) + 
+  geom_bar(stat = "identity" , position='dodge', width = c(0.45,rep(0.9,22),0.45)) + 
+  geom_errorbar(aes(ymin= r2_LCL, ymax= r2_UCL), width = .2, position = position_dodge(.9)) +
   geom_hline(yintercept=1,linetype="dashed") +
   scale_fill_brewer(palette="Paired") + 
   facet_grid(.~categories, scales = "free", space = "free") +
@@ -312,7 +343,7 @@ density_plots = ggplot(PRS_litt_df, aes(x=PRS_LORD_CaG,fill = Cohort)) +
 
 
 quintile_plot <- ggplot(or_perquintile, aes(x = labels, y = odds_ratio,group=1)) + 
- # geom_line(linetype = "dotted")+
+  geom_errorbar(aes(ymin= ymin_OR, ymax= ymax_OR), width = .2, position = position_dodge(.9)) +
   geom_point(stat = "identity",color='black',size = 3) +
   geom_hline(yintercept=1,linetype="dashed") + 
   xlab("Quintiles of PRS") +
@@ -329,11 +360,11 @@ model.Gw_PRS <- glm(Lung_cancer ~ PRS_LORD_CaG , data = PRS_litt_df, family = bi
 PRS_litt_df$predict  <-  predict(model.Gw_PRS, PRS_litt_df, type="response")
 # Plot ROC curve
 P4 <- roc(PRS_litt_df$Lung_cancer, PRS_litt_df$predict, ci=TRUE, boot.n=1000, ci.alpha=0.9, stratified=FALSE,plot=FALSE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=FALSE,print.auc=TRUE, show.thres=TRUE,quiet= TRUE)
-text_annotation = paste0('AUC: ',round(P4$ci[2],2),' (',round(P4$ci[1],2),'-',round(P4$ci[3],2),')')
+text_annotation = paste0('AUC: ',round(P4$ci[2],3),'0 (',round(P4$ci[1],3),'0-',round(P4$ci[3],3),')')
 
 roc_curve = ggroc(P4) +
   geom_segment(aes(x = 1, y = 0, xend = 0, yend = 1),show.legend = F, linetype = 'dashed') +   xlab('Sensitivity') + ylab('Specificity') +
-  annotate(geom="text", x=0.4, y=0.2, label=text_annotation) +
+  annotate(geom="text", x=0.35, y=0.2, label=text_annotation) +
   theme(legend.position = c(0.8, 0.8),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -355,15 +386,17 @@ models_ALL = readRDS(file.path(params$datapath,'results/models_ALL.RDS'))
 #plots
 plots_all <- ggplot(models_ALL[[3]],aes(x = Type, y= odds_ratio,fill = term)) + 
   geom_bar(stat = "identity",position = position_dodge(),width = 0.6) + 
+  geom_errorbar(aes(ymin= ymin_OR, ymax= ymax_OR), width = .2, position = position_dodge(.6)) +
   geom_hline(yintercept=1,linetype="dashed") +
-  scale_fill_manual('Combined effect',values=brewer.pal(8,'Paired')[c(1:4,7:8)],
+  scale_fill_manual('Combined effect',values=brewer.pal(8,'Paired')[c(1:4,7:8,6)],
                     labels = c("Low ~ Never","Low ~ Ever","Interm. ~ Never","Interm. ~ Ever","High ~ Never","High ~ Ever")) +
-  geom_text(aes(label=N), vjust=-0.4, color="gray20",
-            position = position_dodge(0.6)) +
-  ylim(c(0,22)) +
-  geom_signif(y_position = 20, xmin = 0.85, xmax = 3.15,
+  geom_label(aes(label=N,y=-2), vjust=0.4, color="gray10",label.size=0,
+               position = position_dodge(0.6),show.legend = F) +
+   geom_label(aes(x = c(0.85,1.15,1.85,2.15,2.85,3.15), y = odds_ratio, label = round(odds_ratio,2)),label.size = 0,show.legend = F,vjust = -0.5, inherit.aes = F,label.padding =unit(0.1, "lines")) +
+  ylim(c(-2,25)) +
+  geom_signif(y_position =  max(models_ALL[[3]]$ymax_OR) + 1, xmin = 0.85, xmax = 3.15,
     annotation = c("OR = 17.0X***"), tip_length = 0.01) +
-  labs(title = "Smoking and genetic risk groups", x= "Combination of genetic risk and smoking subgroups", y = "Odds ratio") +
+  labs(title = "", x= "Combination of genetic risk and smoking subgroups", y = "Odds ratio") +
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.background = element_blank(),
@@ -375,13 +408,14 @@ plots_all <- ggplot(models_ALL[[3]],aes(x = Type, y= odds_ratio,fill = term)) +
 
 plots_smoking <- ggplot(models_ALL[[2]],aes(x = Type, y= odds_ratio,fill = Smoking)) + 
   geom_bar(stat = "identity" , position = position_dodge(),width = 0.6) + 
+  geom_errorbar(aes(ymin= ymin_OR, ymax= ymax_OR), width = .2, position = position_dodge(0.6)) +
   geom_hline(yintercept=1,linetype="dashed") +
   scale_fill_manual('Smoking',values=brewer.pal(11,'BrBG')[c(5,1)],
                     labels = c("Never","Ever")) +
-  geom_signif(y_position = c(8,10,12), xmin = c(0.85,1.85,2.85), xmax = c(1.15,2.15,3.15),
+  geom_signif(y_position = rep(max(models_ALL[[2]]$ymax_OR) + 0.5,3), xmin = c(0.85,1.85,2.85), xmax = c(1.15,2.15,3.15),
     annotation = c("OR = 7.7X***","OR = 9.8X***","OR = 11.3X***"), tip_length = 0.01) +
-  ylim(c(0,13)) +
-  labs(title = "Smoking", x= "Genetic risk groups", y = "Odds ratio") +
+  ylim(c(0,16)) +
+  labs(title = "", x= "Genetic risk groups", y = "Odds ratio") +
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.background = element_blank(),
@@ -392,13 +426,14 @@ plots_smoking <- ggplot(models_ALL[[2]],aes(x = Type, y= odds_ratio,fill = Smoki
 
 plots_quintile <- ggplot(models_ALL[[1]],aes(x = Smoking, y= odds_ratio,fill = Type)) + 
   geom_bar(stat = "identity" , position = position_dodge(),width = 0.6) + 
+  geom_errorbar(aes(ymin= ymin_OR, ymax= ymax_OR), width = .2, position = position_dodge(0.6)) +
   geom_hline(yintercept=1,linetype="dashed") +
   scale_fill_manual('Genetic Risk',values=brewer.pal(11,'PRGn')[c(5,3,1)],
                     labels =  c("Low","Intermediate","High")) +
-  geom_signif(y_position = c(1.7,2.3), xmin = c(0.8,1.8), xmax = c(1.2,2.2),
+  geom_signif(y_position = rep(max(models_ALL[[1]]$ymax_OR) + 0.1,2), xmin = c(0.8,1.8), xmax = c(1.2,2.2),
     annotation = c("OR = 1.5X*","OR = 2.2X***"), tip_length = 0.01) +
-  ylim(c(0,2.5)) +
-  labs(title = "Genetic risk groups", x= "Smoking groups", y = "Odds ratio") +
+  ylim(c(0,2.6)) +
+  labs(title = "", x= "Smoking groups", y = "Odds ratio") +
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.background = element_blank(),
