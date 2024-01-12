@@ -58,6 +58,7 @@ for(i in seq_along(values))
   
   #Z score normalisation
   if(length(grep('weight',colnames(data)[2]))==1) data[,2] <- (data[,2]-mean(data[,2]))/sd(data[,2])
+  if(length(grep('rs1051730_alleles',colnames(data)[2]))==1) data[,2] <- (data[,2]-mean(data[,2]))/sd(data[,2])
   
   #regression models
   regression_model <- glm(Lung_cancer ~ . , data = data, family = binomial)
@@ -176,7 +177,9 @@ for(c in 1:3){
      model$odds_ratio = exp(model$estimate)
      model$Type = c('Low','Intermediate','High')
      model$Smoking = smoking[i]
- 
+     model$N = c(table(PRS_litt_df_subset$genetic_risk_factor))
+     
+     
      #95% CI for OR
      model$ymin_OR = exp(model$estimate - (1.96 * model$std.error))
      model$ymax_OR = exp(model$estimate + (1.96 * model$std.error))
@@ -206,6 +209,8 @@ for(c in 1:3){
      model$odds_ratio = exp(model$estimate)
      model$Type = c('Low','Intermediate','High')[i]
      model$Smoking = c('Never','Ever')
+     model$N = c(table(PRS_litt_df_subset$tabagism_recoded))
+     
 
      #95% CI for OR
      model$ymin_OR = exp(model$estimate - (1.96 * model$std.error))
@@ -363,7 +368,7 @@ P4 <- roc(PRS_litt_df$Lung_cancer, PRS_litt_df$predict, ci=TRUE, boot.n=1000, ci
 text_annotation = paste0('AUC: ',round(P4$ci[2],3),'0 (',round(P4$ci[1],3),'0-',round(P4$ci[3],3),')')
 
 roc_curve = ggroc(P4) +
-  geom_segment(aes(x = 1, y = 0, xend = 0, yend = 1),show.legend = F, linetype = 'dashed') +   xlab('Sensitivity') + ylab('Specificity') +
+  geom_segment(aes(x = 1, y = 0, xend = 0, yend = 1),show.legend = F, linetype = 'dashed') +   ylab('Sensitivity') + xlab('Specificity') +
   annotate(geom="text", x=0.35, y=0.2, label=text_annotation) +
   theme(legend.position = c(0.8, 0.8),
         panel.grid.major = element_blank(),
@@ -376,6 +381,20 @@ table = read.delim(file.path(params$datapath,'data/Number_PRS_quantile1.txt'), c
 
 pdf(file.path(params$datapath,'results/Figure3.pdf'),width = 10,height = 6)
 ((density_plots | roc_curve | quintile_plot) / tableGrob(table)) + plot_layout(height = c(4,2)) + plot_annotation(tag_levels = 'A')
+dev.off()
+
+###sup figure for interaction
+pdf(file.path(params$datapath,'results/FigureSup_interaction.pdf'),width = 7.5,height = 7)
+interaction.plot(x.factor = PRS_litt_df$genetic_risk_factor, #x-axis variable
+                 trace.factor = PRS_litt_df$tabagism_recoded, #variable for lines
+                 response = PRS_litt_df$Lung_cancer, #y-axis variable
+                 fun = mean, #metric to plot
+                 ylab = "Percentage of patients with lung cancer",
+                 xlab = "genetic risk factor",
+                 col = c("red", "blue"),
+                 lty = 1, #line type
+                 lwd = 3, #line width
+                 trace.label = "Smoking status",pch = 15,type='b')
 dev.off()
 ```
 
@@ -412,9 +431,11 @@ plots_smoking <- ggplot(models_ALL[[2]],aes(x = Type, y= odds_ratio,fill = Smoki
   geom_hline(yintercept=1,linetype="dashed") +
   scale_fill_manual('Smoking',values=brewer.pal(11,'BrBG')[c(5,1)],
                     labels = c("Never","Ever")) +
+  geom_label(aes(label=N,y=-1), vjust=0.4, color=rep(c("gray10","gray90"),3),label.size=0,
+               position = position_dodge(0.6),show.legend = F) +
   geom_signif(y_position = rep(max(models_ALL[[2]]$ymax_OR) + 0.5,3), xmin = c(0.85,1.85,2.85), xmax = c(1.15,2.15,3.15),
     annotation = c("OR = 7.7X***","OR = 9.8X***","OR = 11.3X***"), tip_length = 0.01) +
-  ylim(c(0,16)) +
+  ylim(c(-1,16)) +
   labs(title = "", x= "Genetic risk groups", y = "Odds ratio") +
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -430,9 +451,11 @@ plots_quintile <- ggplot(models_ALL[[1]],aes(x = Smoking, y= odds_ratio,fill = T
   geom_hline(yintercept=1,linetype="dashed") +
   scale_fill_manual('Genetic Risk',values=brewer.pal(11,'PRGn')[c(5,3,1)],
                     labels =  c("Low","Intermediate","High")) +
+  geom_label(aes(label=N,y=-0.2), vjust=0.4,color=rep(c("gray10","gray10","gray90"),2),label.size=0,
+               position = position_dodge(0.6),show.legend = F) +
   geom_signif(y_position = rep(max(models_ALL[[1]]$ymax_OR) + 0.1,2), xmin = c(0.8,1.8), xmax = c(1.2,2.2),
     annotation = c("OR = 1.5X*","OR = 2.2X***"), tip_length = 0.01) +
-  ylim(c(0,2.6)) +
+  ylim(c(-0.2,2.6)) +
   labs(title = "", x= "Smoking groups", y = "Odds ratio") +
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -452,6 +475,59 @@ dev.off()
 ```{r session, message= T}
 ###session
 sessionInfo()
+
+
+PRS_litt_df = as.data.frame(PRS_litt)
+quantile = quantile(PRS_litt_df$PRS_LORD_CaG,c(0,0.2,0.8,1))
+
+#Smoking
+PRS_litt_df$tabagism_recoded = NA
+PRS_litt_df$tabagism_recoded[PRS_litt_df$tabagism == "Current_smoker"] = 'Ever'
+PRS_litt_df$tabagism_recoded[PRS_litt_df$tabagism == "Former_smoker"] = 'Ever'
+PRS_litt_df$tabagism_recoded[PRS_litt_df$tabagism == "Never_smoker"] = 'Never'
+PRS_litt_df$tabagism_recoded = factor(PRS_litt_df$tabagism_recoded,levels= c('Never','Ever'))
+
+#Genetic Risk
+PRS_litt_df$genetic_risk_factor = 'Low'
+PRS_litt_df$genetic_risk_factor[PRS_litt_df$PRS_LORD_CaG > quantile[2] & PRS_litt_df$PRS_LORD_CaG <= quantile[3]] = 'Intermediate'
+PRS_litt_df$genetic_risk_factor[PRS_litt_df$PRS_LORD_CaG > quantile[3]] = 'High'
+PRS_litt_df$genetic_risk_factor = factor(PRS_litt_df$genetic_risk_factor, levels = c('Low','Intermediate','High'))
+
+#Combined effect                      
+PRS_litt_df$genetic_risk_factor_tabagism = paste0(PRS_litt_df$genetic_risk_factor,' ',PRS_litt_df$tabagism_recoded)       
+PRS_litt_df$genetic_risk_factor_tabagism = factor(PRS_litt_df$genetic_risk_factor_tabagism, levels = c("Low Never","Low Ever","Intermediate Never","Intermediate Ever","High Never","High Ever"))
+
+#Perform GLMs below
+models_ALL =list()
+variables = c('genetic_risk_factor_tabagism','genetic_risk_factor','tabagism_recoded')
+smoking = c('Never','Ever')
+genetic_risk_factor = c('Low','Intermediate','High')
+
+#recode variables as numeric....
+PRS_litt_df$genetic_risk_factor <-   car::recode(PRS_litt_df$genetic_risk_factor, "'Low'= 0; 'Intermediate'=1; 'High'=2",as.factor=F)
+PRS_litt_df$Smoking_status <- car::recode(PRS_litt_df$tabagism_recoded, "'Never'=0; 'Ever'=1",as.factor=F)
+model.interaction_group1<- glm(Lung_cancer ~ Smoking_status*genetic_risk_factor, data = PRS_litt_df, family = binomial, na.action = na.omit)
+
+#LRT
+
+
+
+model.tab.clin <- glm(Lung_cancer ~ Age + Sex + BMI + tabagism + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10, data = PRS_litt_df, family = binomial,  na.action = na.omit)
+
+model.Gw_PRS.tab.clin <- glm(Lung_cancer ~ PRS_LORD_CaG + Age + Sex + BMI + tabagism + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10, data = PRS_litt_df, family = binomial,  na.action = na.omit)
+
+m1 <- glm(Lung_cancer ~  tabagism, data = PRS_litt_df, family = binomial,  na.action = na.omit)
+m2 <- glm(Lung_cancer ~ Sex  + tabagism, data = PRS_litt_df, family = binomial,  na.action = na.omit)
+m3 <- glm(Lung_cancer ~ Sex , data = PRS_litt_df, family = binomial,  na.action = na.omit)
+
+
+lmtest::lrtest(model.tab.clin, model.Gw_PRS.tab.clin)
+#Voici le code de Yohan(je trouve exactement le même résultat que le précédent)
+anova(model.tab.clin, model.Gw_PRS.tab.clin, test="LRT")
+ 
+
+
+
 ```
 
 
